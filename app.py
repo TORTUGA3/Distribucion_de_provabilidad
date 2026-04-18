@@ -58,64 +58,80 @@ if 'df' in st.session_state:
     analisis = st.text_area("Análisis de sesgo y outliers:")
 
     # --- PARTE 4: PRUEBA DE HIPÓTESIS (CORREGIDA) ---
+  # --- PARTE 4: PRUEBA DE HIPÓTESIS ---
     st.header("4. Prueba de Hipótesis (Prueba Z)")
 
-    # Parámetros que el usuario puede mover
     c1, c2, c3 = st.columns(3)
     with c1:
-        # Aquí permitimos que el usuario escriba la hipótesis
         mu_h0 = st.number_input("Hipótesis Nula (μ0):", value=float(datos.mean()))
     with c2:
         tipo_prueba = st.selectbox("Tipo de prueba:", ["Bilateral", "Cola Derecha", "Cola Izquierda"])
     with c3:
         alpha = st.slider("Significancia (α):", 0.01, 0.10, 0.05, step=0.01)
 
-    # CÁLCULOS EN TIEMPO REAL
+    # Cálculos base
     n = len(datos)
     media_muestral = datos.mean()
-    # Para Prueba Z usamos desviación estándar poblacional conocida 
-    # (o la de la muestra si n > 30 como pide tu tarea)
     sigma = datos.std() 
-    
-    # LA FÓRMULA MÁGICA
     z_stat = (media_muestral - mu_h0) / (sigma / np.sqrt(n))
-    
-    # Lógica de decisión
-    # --- LOGICA DE DECISIÓN REFORZADA ---
-    # Calculamos el Z crítico basado en alpha
+
+    # --- INICIALIZACIÓN CRÍTICA ---
+    # Esto evita el error de "not defined"
+    p_val = 0.0
+    z_critico = 0.0
+    rechazo = False
+
     if tipo_prueba == "Bilateral":
+        p_val = 2 * (1 - stats.norm.cdf(abs(z_stat)))
         z_critico = stats.norm.ppf(1 - alpha/2)
         rechazo = abs(z_stat) > z_critico
     elif tipo_prueba == "Cola Derecha":
+        p_val = 1 - stats.norm.cdf(z_stat)
         z_critico = stats.norm.ppf(1 - alpha)
         rechazo = z_stat > z_critico
     else: # Cola Izquierda
+        p_val = stats.norm.cdf(z_stat)
         z_critico = stats.norm.ppf(alpha)
         rechazo = z_stat < z_critico
 
-    st.subheader("Veredicto de la Prueba")
-    
-    if rechazo:
-        st.error(f"DECISIÓN: RECHAZAR H0")
-        st.write("Explicación: El estadístico Z cayó en la zona de rechazo (fuera de los límites permitidos).")
-    else:
-        st.success(f"DECISIÓN: NO RECHAZAR H0")
-        st.write("Explicación: No hay suficiente evidencia para dudar de la hipótesis nula.")
+    # Definimos la variable decision para que la use Gemini
+    decision = "RECHAZAR H0" if rechazo else "NO RECHAZAR H0"
 
-    # GRÁFICA DE LA CAMPANA
-    x = np.linspace(-4, 4, 100)
-    y = stats.norm.pdf(x, 0, 1)
-    fig_z, ax_z = plt.subplots()
-    ax_z.plot(x, y, color='black')
-    
-    # Sombrear zona de rechazo
-    if tipo_prueba == "Bilateral":
-        ax_z.fill_between(x, y, where=(abs(x) > z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
-    elif tipo_prueba == "Cola Derecha":
-        ax_z.fill_between(x, y, where=(x > z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
+    st.subheader("Veredicto de la Prueba")
+    if rechazo:
+        st.error(f"DECISIÓN: {decision}")
     else:
-        ax_z.fill_between(x, y, where=(x < z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
-        
-    ax_z.axvline(z_stat, color='blue', linestyle='--', label=f'Tu Z: {z_stat:.2f}')
-    ax_z.legend()
-    st.pyplot(fig_z)
+        st.success(f"DECISIÓN: {decision}")
+
+    # (Aquí va tu código de la Gráfica de la Campana que ya tienes)
+    # ... 
+
+    # --- PARTE 5: MÓDULO DE IA (GEMINI) ---
+    import google.generativeai as genai
+    st.header("5. Asistente de IA (Google Gemini)")
+    api_key = st.text_input("Introduce tu Google Gemini API Key:", type="password")
+
+    if api_key:
+        genai.configure(api_key=api_key)
+        try:
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            if st.button("Consultar a la IA"):
+                # Ahora p_val y decision ya existen garantizadamente
+                prompt_ia = f"""
+                Actúa como un experto en estadística.
+                Resultados de la prueba Z:
+                - Media muestral: {media_muestral:.4f}
+                - mu0: {mu_h0:.4f}
+                - Z calculado: {z_stat:.4f}
+                - P-value: {p_val:.4f}
+                - Alpha: {alpha}
+                - Decisión: {decision}
+                
+                ¿Es correcta la decisión? Explica brevemente.
+                """
+                with st.spinner("Analizando..."):
+                    response = model.generate_content(prompt_ia)
+                    st.subheader("Interpretación de la IA:")
+                    st.write(response.text)
+        except Exception as e:
+            st.error(f"Error: {e}")
