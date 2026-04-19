@@ -104,7 +104,34 @@ if 'df' in st.session_state:
         st.success(f"DECISIÓN: {decision}")
 
     # (Aquí va tu código de la Gráfica de la Campana que ya tienes)
-    # ... 
+    st.subheader("Visualización de la Campana de Gauss")
+    
+    # Crear eje X (de -4 a 4 desviaciones estándar)
+    x = np.linspace(-4, 4, 1000)
+    y = stats.norm.pdf(x, 0, 1)
+
+    fig_z, ax_z = plt.subplots(figsize=(10, 5))
+    ax_z.plot(x, y, color='black', label='Distribución Normal Estándar')
+
+    # Sombrear zonas de rechazo según el tipo de prueba
+    if tipo_prueba == "Bilateral":
+        ax_z.fill_between(x, y, where=(abs(x) > z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
+        ax_z.axvline(z_critico, color='red', linestyle='--')
+        ax_z.axvline(-z_critico, color='red', linestyle='--')
+    elif tipo_prueba == "Cola Derecha":
+        ax_z.fill_between(x, y, where=(x > z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
+        ax_z.axvline(z_critico, color='red', linestyle='--')
+    else: # Cola Izquierda
+        ax_z.fill_between(x, y, where=(x < z_critico), color='red', alpha=0.3, label='Zona de Rechazo')
+        ax_z.axvline(z_critico, color='red', linestyle='--')
+
+    # Dibujar la posición de tu Z calculado (el punto azul)
+    ax_z.axvline(z_stat, color='blue', linewidth=2, label=f'Tu Z calculado: {z_stat:.2f}')
+    ax_z.scatter([z_stat], [0], color='blue', s=100, zorder=5)
+
+    ax_z.set_title("Distribución Z y Regiones de Rechazo")
+    ax_z.legend()
+    st.pyplot(fig_z)
 
     # --- PARTE 5: MÓDULO DE IA (GEMINI) ---
     import google.generativeai as genai
@@ -117,19 +144,24 @@ if 'df' in st.session_state:
             model = genai.GenerativeModel('gemini-2.5-flash')
             if st.button("Consultar a la IA"):
                 # Ahora p_val y decision ya existen garantizadamente
-                prompt_ia = f"""
-                Actúa como un experto en estadística.
-                Resultados de la prueba Z:
-                - Media muestral: {media_muestral:.4f}
-                - mu0: {mu_h0:.4f}
-                - Z calculado: {z_stat:.4f}
-                - P-value: {p_val:.4f}
-                - Alpha: {alpha}
-                - Decisión: {decision}
-                
-                ¿Es correcta la decisión? Explica brevemente.
-                """
-                with st.spinner("Analizando..."):
+             prompt_ia = f"""
+             Actúa como un profesor de estadística muy paciente y experto en explicar conceptos complejos a principiantes.
+            
+             Contexto del experimento:
+             - Tenemos un promedio real de {media_muestral:.2f}.
+             - Alguien propuso una teoría (Hipótesis Nula) de que el promedio debería ser {mu_h0:.2f}.
+             - Usamos un nivel de tolerancia al error (Alpha) de {alpha}.
+             - El resultado de nuestro cálculo (Estadístico Z) fue {z_stat:.4f}.
+             - La probabilidad de que esto sea pura casualidad (P-value) es de {p_val:.4f}.
+             - La decisión tomada es: {decision}.
+
+             TAREA:
+             1. Explica si la decisión es correcta usando una analogía sencilla.
+             2. No uses lenguaje matemático pesado. Explica el 'P-value' como si fuera una medida de 'qué tan sorprendente' es el resultado.
+             3. Dile ala persona si su decisión tiene sentido lógico basado en la diferencia entre el promedio real y el hipotético.
+             4. no es nesesario mucho tenxto solo breves explicaciones por que  y siendo directo a la desicion
+             """
+            with st.spinner("Analizando..."):
                     response = model.generate_content(prompt_ia)
                     st.subheader("Interpretación de la IA:")
                     st.write(response.text)
